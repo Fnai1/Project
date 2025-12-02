@@ -22,7 +22,6 @@ jobs:
       - name: Подготовка окружения
         shell: pwsh
         run: |
-          # Создаем структуру каталогов
           Write-Host "Создание структуры каталогов..."
           New-Item -ItemType Directory -Path "artifacts" -Force
           New-Item -ItemType Directory -Path "artifacts/build" -Force
@@ -32,25 +31,28 @@ jobs:
           
       - name: Создать CF файл конфигурации
         shell: pwsh
+        env:
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_ACTOR: ${{ github.actor }}
         run: |
           $cfPath = "artifacts/build/andreym.cf"
-          $version = "$(Get-Date -Format 'yyyy.MM.dd').${{ github.run_number }}"
+          $version = "$(Get-Date -Format 'yyyy.MM.dd').$env:GITHUB_RUN_NUMBER"
           
           Write-Host "Создание CF файла: $cfPath"
           
-          # Создаем контент без here-string
           $lines = @(
             "# Конфигурация 1C",
             "Название: andreym",
             "Версия: $version",
             "Дата сборки: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
-            "Сборка: ${{ github.run_id }}",
-            "Ветка: ${{ github.ref_name }}",
-            "Автор: ${{ github.actor }}"
+            "Сборка: $env:GITHUB_RUN_ID",
+            "Ветка: $env:GITHUB_REF_NAME",
+            "Автор: $env:GITHUB_ACTOR"
           )
           
           $lines | Out-File -FilePath $cfPath -Encoding UTF8
-          
           Write-Host "✅ CF файл создан: $cfPath"
           Write-Host "📏 Размер: $((Get-Item $cfPath).Length) байт"
           
@@ -60,7 +62,6 @@ jobs:
           $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
           $source = "artifacts/build/andreym.cf"
           $backup = "artifacts/backups/andreym-$timestamp.cf"
-          
           Copy-Item -Path $source -Destination $backup
           Write-Host "✅ Резервная копия: $backup"
           
@@ -75,7 +76,7 @@ jobs:
     name: 🚀 Деплой
     runs-on: windows-latest
     needs: build
-    if: github.ref == "refs/heads/main"
+    if: github.ref == 'refs/heads/main'
     
     steps:
       - name: Checkout кода
@@ -90,7 +91,6 @@ jobs:
       - name: Создать папку для логов (если не существует)
         shell: pwsh
         run: |
-          # Убедимся что папка logs существует
           if (!(Test-Path "artifacts/logs")) {
             New-Item -ItemType Directory -Path "artifacts/logs" -Force
             Write-Host "✅ Папка logs создана"
@@ -112,7 +112,6 @@ jobs:
             Write-Host "-----------------"
           } else {
             Write-Host "❌ CF файл не найден"
-            # Ищем файлы где угодно
             Write-Host "Поиск всех .cf файлов:"
             Get-ChildItem -Path "." -Recurse -Filter "*.cf" -ErrorAction SilentlyContinue
             exit 1
@@ -128,32 +127,33 @@ jobs:
       - name: Создать лог выполнения
         shell: pwsh
         if: always()
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          CONFIG_NAME: ${{ env.CONFIG_NAME }}
         run: |
           Write-Host "📝 Создание лога выполнения..."
           
-          # Получаем статус выполнения
           if ($LASTEXITCODE -eq 0) {
             $status = "УСПЕХ"
           } else {
             $status = "ОШИБКА"
           }
           
-          # Создаем папку если её нет
           $logDir = "artifacts/logs"
           if (!(Test-Path $logDir)) {
             New-Item -ItemType Directory -Path $logDir -Force
           }
           
-          # Создаем лог
-          $logFile = "$logDir/deploy-${{ github.run_id }}.log"
+          $logFile = "$logDir/deploy-$env:GITHUB_RUN_ID.log"
           $logContent = @(
             "1C CI/CD Лог выполнения",
             "=======================",
-            "Запуск: ${{ github.run_id }}",
-            "Ветка: ${{ github.ref_name }}",
+            "Запуск: $env:GITHUB_RUN_ID",
+            "Ветка: $env:GITHUB_REF_NAME",
             "Статус: $status",
             "Время: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
-            "Конфигурация: ${{ env.CONFIG_NAME }}"
+            "Конфигурация: $env:CONFIG_NAME"
           )
           
           $logContent | Out-File -FilePath $logFile -Encoding UTF8
