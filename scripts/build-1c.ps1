@@ -89,3 +89,15 @@ Write-Host "Created: $($fileInfo.CreationTime)" -ForegroundColor White
 Write-Host "Modified: $($fileInfo.LastWriteTime)" -ForegroundColor White
 
 return $cfFile
+
+# Возвращаем путь к созданному файлу (добавьте в конец скрипта)
+$cfFile = Join-Path $OutputDir "$ConfigName.cf"
+if (Test-Path $cfFile) {
+    Write-Host "Build output: $cfFile" -ForegroundColor Green
+    # Записываем путь в переменную для GitHub Actions
+    echo "CF_FILE_PATH=$cfFile" >> $env:GITHUB_ENV
+    echo "CF_FILE_NAME=$ConfigName.cf" >> $env:GITHUB_ENV
+} else {
+    Write-Error "CF file was not created"
+    exit 1
+}
