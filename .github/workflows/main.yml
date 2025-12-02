@@ -32,16 +32,17 @@ jobs:
         shell: pwsh
         run: |
           $cfPath = "artifacts/build/andreym.cf"
-          $version = "$(Get-Date -Format 'yyyy.MM.dd').${{ github.run_number }}"
+          $version = "$(Get-Date -Format 'yyyy.MM.dd').$env:GITHUB_RUN_NUMBER"
           
+          # Используем here-string с правильным синтаксисом
           @"
 # Конфигурация 1C
 Название: andreym
 Версия: $version
 Дата сборки: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-Сборка: ${{ github.run_id }}
-Ветка: ${{ github.ref_name }}
-Автор: ${{ github.actor }}
+Сборка: $env:GITHUB_RUN_ID
+Ветка: $env:GITHUB_REF_NAME
+Автор: $env:GITHUB_ACTOR
 "@ | Out-File -FilePath $cfPath -Encoding UTF8
           
           Write-Host "✅ CF файл создан: $cfPath"
@@ -68,7 +69,7 @@ jobs:
     name: 🚀 Деплой
     runs-on: windows-latest
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == "refs/heads/main"
     
     steps:
       - name: Checkout кода
@@ -78,6 +79,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: 1c-configuration-${{ github.run_id }}
+          path: artifacts/
           
       - name: Проверить конфигурацию
         shell: pwsh
@@ -109,9 +111,9 @@ jobs:
           $logContent = @"
 1C CI/CD Лог выполнения
 =======================
-Запуск: ${{ github.run_id }}
-Ветка: ${{ github.ref_name }}
-Статус: ${{ job.status }}
+Запуск: $env:GITHUB_RUN_ID
+Ветка: $env:GITHUB_REF_NAME
+Статус: $env:JOB_STATUS
 Время: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 "@
           
