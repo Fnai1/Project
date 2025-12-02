@@ -1,0 +1,46 @@
+# Создайте файл .gitignore
+@'
+# Исключения для 1С
+*.cf
+*.cfu
+*.epf
+*.erf
+*.dt
+*.log
+
+# Исключения для CI/CD
+artifacts/build/
+artifacts/temp/
+!artifacts/.gitkeep
+
+# Docker
+.dockerignore
+docker/tools/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+env/
+
+# Системные
+.DS_Store
+
+# Логи
+*.log
+logs/
+
+# Временные файлы
+temp/
+tmp/
+'@ | Set-Content -Path ".gitignore" -Encoding UTF8
