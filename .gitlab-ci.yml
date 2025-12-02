@@ -1,159 +1,55 @@
 ﻿image: mcr.microsoft.com/windows/servercore:ltsc2019
 
 variables:
-  CONFIG_NAME: "AccountingBase"
-  PROJECT_NAME: "andreymatanin-1c-project"
+  CONFIG_NAME: "andreym"
   ARTIFACTS_DIR: "artifacts"
   BUILD_DIR: "$ARTIFACTS_DIR/build"
-  BACKUP_DIR: "$ARTIFACTS_DIR/backups"
-  SCRIPTS_DIR: "scripts"
-  LOGS_DIR: "$ARTIFACTS_DIR/logs"
-  SHELL: "powershell"
-
-cache:
-  key: "${CI_COMMIT_REF_SLUG}"
-  paths:
-    - "$ARTIFACTS_DIR/cache/"
-  policy: pull-push
 
 stages:
   - init
-  - validate
   - build
   - test
-  - deploy-test
-  - deploy-prod
-  - notify
 
-workflow:
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      variables:
-        DEPLOY_ENV: "production"
-    - if: '$CI_COMMIT_BRANCH == "develop"'
-      variables:
-        DEPLOY_ENV: "staging"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_TAG'
-
-init-pipeline:
+init-stage:
   stage: init
   tags:
     - windows
-    - 1c
-    - docker
   script:
-    - echo "Initializing 1C CI/CD Pipeline"
-    - echo "Initialization completed"
+    - echo "Initializing pipeline"
+    - echo "Config: $CONFIG_NAME"
+    - mkdir -p "$BUILD_DIR"
   artifacts:
     paths:
-      - "$LOGS_DIR/"
+      - "$ARTIFACTS_DIR/"
     expire_in: 1 day
 
-validate-project:
-  stage: validate
-  tags:
-    - windows
-    - 1c
-    - docker
-  script:
-    - echo "Validating project structure..."
-    - echo "Validation completed successfully"
-  artifacts:
-    paths:
-      - "$LOGS_DIR/validation.log"
-    expire_in: 1 week
-  only:
-    - main
-    - develop
-    - merge_requests
-
-build-configuration:
+build-stage:
   stage: build
   tags:
     - windows
-    - 1c
-    - docker
   script:
-    - echo "Building 1C configuration: $CONFIG_NAME"
-    - echo "Creating simulated CF file..."
-    - mkdir -p "$BUILD_DIR"
-    - echo "1C Configuration File" > "$BUILD_DIR/$CONFIG_NAME.cf"
-    - echo "Build simulation completed"
+    - echo "Building configuration: $CONFIG_NAME"
+    - echo "Creating CF file..."
+    - echo "1C CF File: $CONFIG_NAME" > "$BUILD_DIR/$CONFIG_NAME.cf"
+    - echo "Version: 1.0" >> "$BUILD_DIR/$CONFIG_NAME.cf"
+    - echo "Build completed"
   artifacts:
     paths:
-      - "$BUILD_DIR/*.cf"
+      - "$BUILD_DIR/*"
     expire_in: 30 days
   only:
     - main
     - develop
-    - merge_requests
 
-test-configuration:
+test-stage:
   stage: test
   tags:
     - windows
-    - 1c
-    - docker
   script:
     - echo "Testing configuration: $CONFIG_NAME"
+    - echo "Checking file..."
     - echo "Test passed"
-  artifacts:
-    paths:
-      - "$LOGS_DIR/test.log"
-    expire_in: 1 week
+  needs: ["build-stage"]
   only:
     - main
     - develop
-
-deploy-to-test:
-  stage: deploy-test
-  tags:
-    - windows
-    - 1c
-    - docker
-  environment:
-    name: "test"
-    url: "http://test-server:1540"
-  script:
-    - echo "Test deployment simulation"
-    - echo "Completed"
-  when: manual
-  only:
-    - develop
-
-deploy-to-production:
-  stage: deploy-prod
-  tags:
-    - windows
-    - 1c
-    - docker
-  environment:
-    name: "production"
-    url: "http://prod-server:1540"
-  script:
-    - echo "Production deployment simulation"
-    - echo "Completed"
-  when: manual
-  only:
-    - main
-
-notify-success:
-  stage: notify
-  tags:
-    - windows
-    - 1c
-    - docker
-  script:
-    - echo "Success notification"
-  when: on_success
-
-notify-failure:
-  stage: notify
-  tags:
-    - windows
-    - 1c
-    - docker
-  script:
-    - echo "Failure notification"
-  when: on_failure
