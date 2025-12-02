@@ -1,82 +1,45 @@
-﻿name: 1C CI/CD Pipeline
+﻿name: 1C CI/CD Simple Test
 
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
+on: [push, pull_request]
 
 jobs:
-  init:
+  build-and-test:
     runs-on: windows-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Initialize
+      uses: actions/checkout@v4
+    
+    - name: Build and test
       shell: pwsh
       run: |
+        # Настройка
         $CONFIG_NAME = "andreym"
         $BUILD_DIR = "artifacts/build"
-        echo "Initializing 1C CI/CD Pipeline"
+        
+        echo "=== 1C CI/CD Pipeline ==="
         echo "Configuration: $CONFIG_NAME"
-        echo "Running on Windows"
+        
+        # Создаем структуру
         New-Item -ItemType Directory -Path $BUILD_DIR -Force
-        echo "Directories created"
-
-  build:
-    runs-on: windows-latest
-    needs: init
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Build configuration
-      shell: pwsh
-      run: |
-        $CONFIG_NAME = "andreym"
-        $BUILD_DIR = "artifacts/build"
-        echo "Building 1C configuration: $CONFIG_NAME"
-        echo "Creating CF file..."
+        echo "✓ Directories created"
+        
+        # Создаем CF файл
         $cfFile = "$BUILD_DIR/$CONFIG_NAME.cf"
         echo "# 1C Configuration File" > $cfFile
         echo "Name: $CONFIG_NAME" >> $cfFile
         echo "Version: 1.0" >> $cfFile
-        echo "Date: $(Get-Date)" >> $cfFile
-        echo "Project: andreymatanin-project" >> $cfFile
-        echo "Build completed"
-
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: build-artifacts
-        path: artifacts/build/
-
-  test:
-    runs-on: windows-latest
-    needs: build
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Download artifacts
-      uses: actions/download-artifact@v3
-      with:
-        name: build-artifacts
-        path: artifacts/build/
-
-    - name: Test configuration
-      shell: pwsh
-      run: |
-        $CONFIG_NAME = "andreym"
-        $BUILD_DIR = "artifacts/build"
-        $cfFile = "$BUILD_DIR/$CONFIG_NAME.cf"
-        echo "Testing configuration: $CONFIG_NAME"
+        echo "Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")" >> $cfFile
+        echo "✓ CF file created"
+        
+        # Тестируем
+        echo "=== Testing ==="
         if (Test-Path $cfFile) {
-          echo "Test passed: CF file exists"
-          echo "File content:"
-          Get-Content $cfFile
+          echo "✓ Test passed: File exists"
+          echo "File info:"
+          Get-Item $cfFile | Format-List Name, Length, LastWriteTime
         } else {
-          echo "Test failed: CF file not found"
+          echo "✗ Test failed"
           exit 1
         }
+        
+        echo "=== Pipeline completed successfully ==="
