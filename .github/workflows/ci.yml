@@ -5,12 +5,6 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:  # Добавить возможность ручного запуска
-
-env:
-  CONFIG_NAME: "andreym"
-  ARTIFACTS_DIR: "artifacts"
-  BUILD_DIR: "artifacts/build"
 
 jobs:
   init:
@@ -20,11 +14,14 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Initialize
+      shell: pwsh
       run: |
+        $CONFIG_NAME = "andreym"
+        $BUILD_DIR = "artifacts/build"
         echo "Initializing 1C CI/CD Pipeline"
         echo "Configuration: $CONFIG_NAME"
         echo "Running on Windows"
-        mkdir -p "$BUILD_DIR"
+        New-Item -ItemType Directory -Path $BUILD_DIR -Force
         echo "Directories created"
 
   build:
@@ -35,14 +32,18 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Build configuration
+      shell: pwsh
       run: |
+        $CONFIG_NAME = "andreym"
+        $BUILD_DIR = "artifacts/build"
         echo "Building 1C configuration: $CONFIG_NAME"
         echo "Creating CF file..."
-        echo "# 1C Configuration File" > "$BUILD_DIR/$CONFIG_NAME.cf"
-        echo "Name: $CONFIG_NAME" >> "$BUILD_DIR/$CONFIG_NAME.cf"
-        echo "Version: 1.0" >> "$BUILD_DIR/$CONFIG_NAME.cf"
-        echo "Date: $(Get-Date)" >> "$BUILD_DIR/$CONFIG_NAME.cf"
-        echo "Project: andreymatanin-project" >> "$BUILD_DIR/$CONFIG_NAME.cf"
+        $cfFile = "$BUILD_DIR/$CONFIG_NAME.cf"
+        echo "# 1C Configuration File" > $cfFile
+        echo "Name: $CONFIG_NAME" >> $cfFile
+        echo "Version: 1.0" >> $cfFile
+        echo "Date: $(Get-Date)" >> $cfFile
+        echo "Project: andreymatanin-project" >> $cfFile
         echo "Build completed"
 
     - name: Upload artifacts
@@ -65,12 +66,16 @@ jobs:
         path: artifacts/build/
 
     - name: Test configuration
+      shell: pwsh
       run: |
+        $CONFIG_NAME = "andreym"
+        $BUILD_DIR = "artifacts/build"
+        $cfFile = "$BUILD_DIR/$CONFIG_NAME.cf"
         echo "Testing configuration: $CONFIG_NAME"
-        if (Test-Path "$BUILD_DIR/$CONFIG_NAME.cf") {
+        if (Test-Path $cfFile) {
           echo "Test passed: CF file exists"
           echo "File content:"
-          Get-Content "$BUILD_DIR/$CONFIG_NAME.cf"
+          Get-Content $cfFile
         } else {
           echo "Test failed: CF file not found"
           exit 1
