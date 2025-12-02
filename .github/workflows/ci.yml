@@ -74,7 +74,7 @@ jobs:
         id: build
         shell: pwsh
         env:
-          V8_REPOSITORY_PATH: "\\test-server\1c-repository"  # Замените на реальный или оставьте тестовый
+          V8_REPOSITORY_PATH: "\\test-server\\1c-repository"  # Замените на реальный или оставьте тестовый
         run: |
           echo "Running 1C build script..."
           
