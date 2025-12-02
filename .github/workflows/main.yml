@@ -34,16 +34,18 @@ jobs:
           $cfPath = "artifacts/build/andreym.cf"
           $version = "$(Get-Date -Format 'yyyy.MM.dd').$env:GITHUB_RUN_NUMBER"
           
-          # Используем here-string с правильным синтаксисом
-          @"
-# Конфигурация 1C
-Название: andreym
-Версия: $version
-Дата сборки: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-Сборка: $env:GITHUB_RUN_ID
-Ветка: $env:GITHUB_REF_NAME
-Автор: $env:GITHUB_ACTOR
-"@ | Out-File -FilePath $cfPath -Encoding UTF8
+          # Создаем контент без here-string или используем Write-Output
+          $lines = @(
+            "# Конфигурация 1C",
+            "Название: andreym",
+            "Версия: $version",
+            "Дата сборки: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
+            "Сборка: $env:GITHUB_RUN_ID",
+            "Ветка: $env:GITHUB_REF_NAME",
+            "Автор: $env:GITHUB_ACTOR"
+          )
+          
+          $lines | Out-File -FilePath $cfPath -Encoding UTF8
           
           Write-Host "✅ CF файл создан: $cfPath"
           Write-Host "📏 Размер: $((Get-Item $cfPath).Length) байт"
@@ -108,14 +110,15 @@ jobs:
         shell: pwsh
         if: always()
         run: |
-          $logContent = @"
-1C CI/CD Лог выполнения
-=======================
-Запуск: $env:GITHUB_RUN_ID
-Ветка: $env:GITHUB_REF_NAME
-Статус: $env:JOB_STATUS
-Время: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-"@
+          # Используем альтернативный подход без here-string
+          $logLines = @(
+            "1C CI/CD Лог выполнения",
+            "=======================",
+            "Запуск: $env:GITHUB_RUN_ID",
+            "Ветка: $env:GITHUB_REF_NAME",
+            "Статус: $env:JOB_STATUS",
+            "Время: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+          )
           
-          $logContent | Out-File -FilePath "artifacts/logs/deploy.log" -Encoding UTF8
+          $logLines | Out-File -FilePath "artifacts/logs/deploy.log" -Encoding UTF8
           Write-Host "📝 Лог сохранен"
