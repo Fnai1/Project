@@ -1,0 +1,119 @@
+﻿name: 1C CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CONFIG_NAME: "andreym"
+
+jobs:
+  build:
+    name: 🔨 Сборка конфигурации
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout кода
+        uses: actions/checkout@v4
+        
+      - name: Подготовка окружения
+        shell: pwsh
+        run: |
+          # Создаем структуру каталогов
+          New-Item -ItemType Directory -Path "artifacts" -Force
+          New-Item -ItemType Directory -Path "artifacts/build" -Force
+          New-Item -ItemType Directory -Path "artifacts/backups" -Force
+          New-Item -ItemType Directory -Path "artifacts/logs" -Force
+          
+      - name: Создать CF файл конфигурации
+        shell: pwsh
+        run: |
+          $cfPath = "artifacts/build/andreym.cf"
+          $version = "$(Get-Date -Format 'yyyy.MM.dd').${{ github.run_number }}"
+          
+          @"
+# Конфигурация 1C
+Название: andreym
+Версия: $version
+Дата сборки: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+Сборка: ${{ github.run_id }}
+Ветка: ${{ github.ref_name }}
+Автор: ${{ github.actor }}
+"@ | Out-File -FilePath $cfPath -Encoding UTF8
+          
+          Write-Host "✅ CF файл создан: $cfPath"
+          Write-Host "📏 Размер: $((Get-Item $cfPath).Length) байт"
+          
+      - name: Создать резервную копию
+        shell: pwsh
+        run: |
+          $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+          $source = "artifacts/build/andreym.cf"
+          $backup = "artifacts/backups/andreym-$timestamp.cf"
+          
+          Copy-Item -Path $source -Destination $backup
+          Write-Host "✅ Резервная копия: $backup"
+          
+      - name: Загрузить артефакты
+        uses: actions/upload-artifact@v4
+        with:
+          name: 1c-configuration-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 30
+
+  deploy:
+    name: 🚀 Деплой
+    runs-on: windows-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout кода
+        uses: actions/checkout@v4
+        
+      - name: Загрузить артефакты
+        uses: actions/download-artifact@v4
+        with:
+          name: 1c-configuration-${{ github.run_id }}
+          
+      - name: Проверить конфигурацию
+        shell: pwsh
+        run: |
+          Write-Host "🔍 Проверка собранной конфигурации..."
+          
+          $cfFile = "artifacts/build/andreym.cf"
+          if (Test-Path $cfFile) {
+            Write-Host "✅ CF файл найден"
+            Write-Host "--- Содержимое ---"
+            Get-Content $cfFile
+            Write-Host "-----------------"
+          } else {
+            Write-Host "❌ CF файл не найден"
+            exit 1
+          }
+          
+      - name: Деплой на тестовый сервер (заглушка)
+        shell: pwsh
+        run: |
+          Write-Host "🚀 Имитация деплоя на сервер 1C..."
+          Write-Host "📄 Используется файл: artifacts/build/andreym.cf"
+          Write-Host "✅ Деплой выполнен успешно (тестовый режим)"
+          
+      - name: Создать лог
+        shell: pwsh
+        if: always()
+        run: |
+          $logContent = @"
+1C CI/CD Лог выполнения
+=======================
+Запуск: ${{ github.run_id }}
+Ветка: ${{ github.ref_name }}
+Статус: ${{ job.status }}
+Время: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+"@
+          
+          $logContent | Out-File -FilePath "artifacts/logs/deploy.log" -Encoding UTF8
+          Write-Host "📝 Лог сохранен"

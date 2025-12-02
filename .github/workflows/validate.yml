@@ -1,0 +1,39 @@
+﻿name: 1C Validation Test
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout кода
+        uses: actions/checkout@v4
+        
+      - name: Проверить структуру проекта
+        run: |
+          echo "Проверка проекта 1C CI/CD..."
+          echo "Текущая директория: $(pwd)"
+          echo ""
+          echo "Содержимое:"
+          ls -la
+          echo ""
+          
+          # Проверяем наличие ключевых элементов
+          if [ -f ".github/workflows/main.yml" ]; then
+            echo "✅ Основной workflow найден"
+          else
+            echo "❌ Основной workflow не найден"
+            exit 1
+          fi
+          
+          if [ -d "artifacts" ] || [ -d "scripts" ]; then
+            echo "✅ Структура проекта существует"
+          else
+            echo "⚠ Папки artifacts/scripts не найдены (будут созданы при сборке)"
+          fi
+          
+          echo ""
+          echo "✅ Проверка завершена успешно"
