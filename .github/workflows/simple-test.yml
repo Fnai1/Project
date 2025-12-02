@@ -1,0 +1,78 @@
+﻿name: 1C CI/CD Simple Test
+
+on: [push, pull_request]
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup environment
+        shell: pwsh
+        run: |
+          echo "Current directory: $PWD"
+          echo "Listing files:"
+          Get-ChildItem
+      
+      - name: Create artifacts directory
+        shell: pwsh
+        run: |
+          # Очищаем старые артефакты
+          Remove-Item -Path "artifacts" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # Создаем структуру
+          New-Item -ItemType Directory -Path "artifacts/build" -Force
+          New-Item -ItemType Directory -Path "artifacts/backups" -Force
+          New-Item -ItemType Directory -Path "artifacts/logs" -Force
+          echo "Directories created"
+      
+      - name: Create CF file
+        shell: pwsh
+        run: |
+          $configName = "andreym"
+          $cfFile = "artifacts/build/$configName.cf"
+          
+          echo "Creating CF file: $cfFile"
+          
+          # Создаем CF файл
+          @"
+# 1C Configuration File
+Name: $configName
+Version: 1.0.0
+Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+Project: andreymatanin-project
+Build: GitHub Actions
+"@ | Out-File -FilePath $cfFile -Encoding UTF8
+          
+          echo "File created"
+          echo "File exists: $(Test-Path $cfFile)"
+          echo "File path: $(Resolve-Path $cfFile)"
+      
+      - name: Verify file creation
+        shell: pwsh
+        run: |
+          echo "Checking files..."
+          echo "Current directory: $PWD"
+          echo "All files in artifacts:"
+          Get-ChildItem -Path "artifacts" -Recurse | Format-Table FullName, Length
+          
+          $cfFile = "artifacts/build/andreym.cf"
+          if (Test-Path $cfFile) {
+            echo "✅ SUCCESS: CF file found at $cfFile"
+            echo "File content:"
+            Get-Content $cfFile
+          } else {
+            echo "❌ ERROR: CF file not found"
+            echo "Listing all .cf files:"
+            Get-ChildItem -Path . -Recurse -Filter "*.cf" -ErrorAction SilentlyContinue
+            exit 1
+          }
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: 1c-artifacts
+          path: artifacts/
+          retention-days: 7
