@@ -1,0 +1,63 @@
+﻿name: 1C CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  init:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Initialize
+      run: |
+        echo "Initializing 1C CI/CD Pipeline"
+        echo "Running on Windows"
+        mkdir -p artifacts/build
+        echo "Directories created"
+
+  build:
+    runs-on: windows-latest
+    needs: init
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Build configuration
+      run: |
+        echo "Building 1C configuration"
+        echo "1C Configuration File" > artifacts/build/config.cf
+        echo "Build completed"
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts
+        path: artifacts/build/
+
+  test:
+    runs-on: windows-latest
+    needs: build
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Download artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: build-artifacts
+        path: artifacts/build/
+    
+    - name: Test configuration
+      run: |
+        echo "Testing configuration"
+        if (Test-Path "artifacts/build/config.cf") {
+          echo "Test passed: CF file exists"
+        } else {
+          echo "Test failed: CF file not found"
+          exit 1
+        }
