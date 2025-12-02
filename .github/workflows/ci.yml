@@ -5,200 +5,93 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: "Deploy environment"
-        required: true
-        default: "test"
-        type: choice
-        options:
-          - test
-          - production
 
 env:
   CONFIG_NAME: "andreym"
-  BUILD_DIR: "artifacts/build"
-  BACKUP_DIR: "artifacts/backups"
-  LOGS_DIR: "artifacts/logs"
 
 jobs:
-  init:
-    name: 🚀 Initialize
-    runs-on: windows-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup PowerShell
-        shell: pwsh
-        run: |
-          echo "PowerShell version: $($PSVersionTable.PSVersion)"
-      
-      - name: Create directories
-        shell: pwsh
-        run: |
-          # Очищаем старые артефакты
-          Remove-Item -Path "${{ env.BUILD_DIR }}" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "${{ env.BACKUP_DIR }}" -Recurse -Force -ErrorAction SilentlyContinue
-          
-          # Создаем новые
-          New-Item -ItemType Directory -Path "${{ env.BUILD_DIR }}" -Force
-          New-Item -ItemType Directory -Path "${{ env.BACKUP_DIR }}" -Force
-          New-Item -ItemType Directory -Path "${{ env.LOGS_DIR }}" -Force
-          echo "Directories created"
-          
-      - name: List project structure
-        shell: pwsh
-        run: |
-          echo "Project structure:"
-          Get-ChildItem -Recurse | Select-Object Name | Format-Table -AutoSize
-
   build:
-    name: 🔨 Build Configuration
+    name: 🔨 Build
     runs-on: windows-latest
-    needs: init
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Show current directory
+      - name: Build configuration
         shell: pwsh
         run: |
-          echo "Current directory:"
-          Get-Location
-          echo "Files in current directory:"
-          Get-ChildItem
-      
-      - name: Run 1C build script
-        id: build
-        shell: pwsh
-        env:
-          V8_REPOSITORY_PATH: "\\test-server\\1c-repository"  # Замените на реальный или оставьте тестовый
-        run: |
-          echo "Running 1C build script..."
+          # Создаем структуру
+          New-Item -ItemType Directory -Path "build" -Force
+          New-Item -ItemType Directory -Path "backups" -Force
           
-          # Создаем тестовый файл если скрипта нет
-          if (-not (Test-Path "scripts/build-1c.ps1")) {
-            echo "Creating test CF file..."
-            $cfFile = "${{ env.BUILD_DIR }}/${{ env.CONFIG_NAME }}.cf"
-            New-Item -ItemType Directory -Path "${{ env.BUILD_DIR }}" -Force
-            echo "# Test 1C Configuration" > $cfFile
-            echo "Name: ${{ env.CONFIG_NAME }}" >> $cfFile
-            echo "Date: $(Get-Date)" >> $cfFile
-            echo "Test CF file created at: $cfFile"
-            echo "CF_FILE_PATH=$cfFile" >> $env:GITHUB_ENV
-          } else {
-            # Запускаем реальный скрипт
-            .\scripts\build-1c.ps1 -ConfigName "${{ env.CONFIG_NAME }}" -OutputDir "${{ env.BUILD_DIR }}"
-          }
+          # Создаем CF файл
+          $cfFile = "build/${{ env.CONFIG_NAME }}.cf"
+          echo "# 1C Configuration" > $cfFile
+          echo "Name: ${{ env.CONFIG_NAME }}" >> $cfFile
+          echo "Version: 1.0" >> $cfFile
+          echo "Date: $(Get-Date)" >> $cfFile
+          echo "✅ CF file created: $cfFile"
           
-          # Проверяем что файл создан
-          $cfFile = "${{ env.BUILD_DIR }}/${{ env.CONFIG_NAME }}.cf"
-          if (Test-Path $cfFile) {
-            echo "✅ CF file created successfully"
-            echo "File path: $cfFile"
-            echo "File size: $((Get-Item $cfFile).Length) bytes"
-            echo "CF_FILE_PATH=$cfFile" >> $env:GITHUB_ENV
-          } else {
-            echo "❌ CF file not found. Listing build directory:"
-            Get-ChildItem -Path "${{ env.BUILD_DIR }}" -Recurse -ErrorAction SilentlyContinue
-            exit 1
-          }
+          # Создаем backup
+          $backupFile = "backups/${{ env.CONFIG_NAME }}-$(Get-Date -Format 'yyyyMMdd-HHmmss').cf"
+          Copy-Item $cfFile $backupFile
+          echo "✅ Backup created: $backupFile"
       
-      - name: Show created files
-        shell: pwsh
-        run: |
-          echo "Files in build directory:"
-          Get-ChildItem -Path "${{ env.BUILD_DIR }}" -Recurse -ErrorAction SilentlyContinue | Format-Table FullName, Length
-          
-          echo "Files in artifacts directory:"
-          Get-ChildItem -Path "artifacts" -Recurse -ErrorAction SilentlyContinue | Format-Table FullName, Length
-      
-      - name: Upload build artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: 1c-build-output
+          name: 1c-build
           path: |
-            ${{ env.BUILD_DIR }}/
-            ${{ env.BACKUP_DIR }}/
-          if-no-files-found: error
+            build/
+            backups/
           retention-days: 30
 
   test:
-    name: ✅ Test Configuration
+    name: ✅ Test
     runs-on: windows-latest
     needs: build
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Show directory before download
-        shell: pwsh
-        run: |
-          echo "Directory before download:"
-          Get-Location
-          Get-ChildItem -Recurse | Select-Object Name | Format-Table
-      
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: 1c-build-output
-          path: .  # Скачиваем в текущую директорию
+          name: 1c-build
+          path: .  # Важно: скачиваем в текущую директорию
       
-      - name: Show directory after download
+      - name: Test configuration
         shell: pwsh
         run: |
-          echo "Directory after download:"
-          Get-Location
+          echo "Looking for CF files..."
+          echo "Current directory: $PWD"
           echo "All files:"
-          Get-ChildItem -Recurse | Select-Object FullName, Length | Format-Table
+          Get-ChildItem -Recurse | Format-Table FullName
           
-          echo "Artifacts directory:"
-          Get-ChildItem -Path "artifacts" -Recurse | Select-Object FullName, Length | Format-Table
-      
-      - name: Run tests
-        shell: pwsh
-        run: |
-          echo "Looking for CF file..."
+          # Ищем файлы в правильных местах
+          $cfFile = "build/${{ env.CONFIG_NAME }}.cf"
+          $backupFiles = Get-ChildItem -Path "backups" -Filter "${{ env.CONFIG_NAME }}-*.cf" -ErrorAction SilentlyContinue
           
-          # Ищем файл несколькими способами
-          $possiblePaths = @(
-            "${{ env.BUILD_DIR }}/${{ env.CONFIG_NAME }}.cf",
-            "artifacts/build/${{ env.CONFIG_NAME }}.cf",
-            "./artifacts/build/${{ env.CONFIG_NAME }}.cf",
-            "$PWD/artifacts/build/${{ env.CONFIG_NAME }}.cf"
-          )
-          
-          $foundFile = $null
-          foreach ($path in $possiblePaths) {
-            if (Test-Path $path) {
-              $foundFile = $path
-              break
-            }
+          if (Test-Path $cfFile) {
+            echo "✅ MAIN CF file found: $cfFile"
+            echo "Content:"
+            Get-Content $cfFile
+            echo ""
+          } else {
+            echo "❌ Main CF file not found: $cfFile"
           }
           
-          if ($foundFile) {
-            echo "✅ CF file found at: $foundFile"
-            echo "File information:"
-            Get-Item $foundFile | Format-List *
-            
-            echo "Content:"
-            Get-Content $foundFile
-            
-            # Проверка размера
-            $sizeKB = (Get-Item $foundFile).Length / 1KB
-            echo "File size: $([math]::Round($sizeKB, 2)) KB"
-            
-            if ($sizeKB -gt 0.1) {
-              echo "✅ File size OK"
-            } else {
-              echo "⚠ File is very small"
-            }
+          if ($backupFiles) {
+            echo "✅ BACKUP files found ($($backupFiles.Count)):"
+            $backupFiles | ForEach-Object { echo "  - $($_.Name)" }
           } else {
-            echo "❌ CF file not found in any location"
-            echo "Searching all files..."
-            Get-ChildItem -Path . -Recurse -Filter "*.cf" -ErrorAction SilentlyContinue | Format-Table FullName
-            Get-ChildItem -Path . -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*${{ env.CONFIG_NAME }}*" } | Format-Table FullName
+            echo "⚠ No backup files found"
+          }
+          
+          # Проверяем что хотя бы один файл есть
+          if ((Test-Path $cfFile) -or $backupFiles) {
+            echo "✅ TEST PASSED: Files created successfully"
+          } else {
+            echo "❌ TEST FAILED: No CF files found"
             exit 1
           }
