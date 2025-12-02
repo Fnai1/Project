@@ -10,7 +10,7 @@ on:
 env:
   CONFIG_NAME: "andreym"
   ARTIFACTS_DIR: "artifacts"
-  BUILD_DIR: "${{ env.ARTIFACTS_DIR }}/build"
+  BUILD_DIR: "artifacts/build"
 
 jobs:
   init:
@@ -22,9 +22,9 @@ jobs:
     - name: Initialize
       run: |
         echo "Initializing 1C CI/CD Pipeline"
-        echo "Configuration: ${{ env.CONFIG_NAME }}"
+        echo "Configuration: $CONFIG_NAME"
         echo "Running on Windows"
-        mkdir -p "${{ env.BUILD_DIR }}"
+        mkdir -p "$BUILD_DIR"
         echo "Directories created"
 
   build:
@@ -36,20 +36,20 @@ jobs:
 
     - name: Build configuration
       run: |
-        echo "Building 1C configuration: ${{ env.CONFIG_NAME }}"
+        echo "Building 1C configuration: $CONFIG_NAME"
         echo "Creating CF file..."
-        echo "# 1C Configuration File" > "${{ env.BUILD_DIR }}/${{ env.CONFIG_NAME }}.cf"
-        echo "Name: ${{ env.CONFIG_NAME }}" >> "${{ env.BUILD_DIR }}/${{ env.CONFIG_NAME }}.cf"
-        echo "Version: 1.0" >> "${{ env.BUILD_DIR }}/${{ env.CONFIG_NAME }}.cf"
-        echo "Date: $(Get-Date)" >> "${{ env.BUILD_DIR }}/${{ env.CONFIG_NAME }}.cf"
-        echo "Project: andreymatanin-project" >> "${{ env.BUILD_DIR }}/${{ env.CONFIG_NAME }}.cf"
+        echo "# 1C Configuration File" > "$BUILD_DIR/$CONFIG_NAME.cf"
+        echo "Name: $CONFIG_NAME" >> "$BUILD_DIR/$CONFIG_NAME.cf"
+        echo "Version: 1.0" >> "$BUILD_DIR/$CONFIG_NAME.cf"
+        echo "Date: $(Get-Date)" >> "$BUILD_DIR/$CONFIG_NAME.cf"
+        echo "Project: andreymatanin-project" >> "$BUILD_DIR/$CONFIG_NAME.cf"
         echo "Build completed"
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
         name: build-artifacts
-        path: ${{ env.BUILD_DIR }}/
+        path: artifacts/build/
 
   test:
     runs-on: windows-latest
@@ -62,15 +62,15 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: build-artifacts
-        path: ${{ env.BUILD_DIR }}/
+        path: artifacts/build/
 
     - name: Test configuration
       run: |
-        echo "Testing configuration: ${{ env.CONFIG_NAME }}"
-        if (Test-Path "${{ env.BUILD_DIR }}/${{ env.CONFIG_NAME }}.cf") {
+        echo "Testing configuration: $CONFIG_NAME"
+        if (Test-Path "$BUILD_DIR/$CONFIG_NAME.cf") {
           echo "Test passed: CF file exists"
           echo "File content:"
-          Get-Content "${{ env.BUILD_DIR }}/${{ env.CONFIG_NAME }}.cf"
+          Get-Content "$BUILD_DIR/$CONFIG_NAME.cf"
         } else {
           echo "Test failed: CF file not found"
           exit 1
