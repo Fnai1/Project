@@ -86,7 +86,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: 1c-configuration-${{ github.run_id }}
-          path: .  # Загружаем в корень рабочей директории
+          path: artifacts  # ✅ Загружаем в artifacts/ - теперь структура правильная
+          merge-multiple: false
           
       - name: Создать папку для логов (если не существует)
         shell: pwsh
@@ -104,7 +105,7 @@ jobs:
           Write-Host "Содержимое artifacts:"
           Get-ChildItem -Path "artifacts" -Recurse -ErrorAction SilentlyContinue | Format-Table FullName
           
-          $cfFile = "artifacts/build/andreym.cf"
+          $cfFile = "artifacts/build/andreym.cf"  # ✅ Путь правильный
           if (Test-Path $cfFile) {
             Write-Host "✅ CF файл найден"
             Write-Host "--- Содержимое ---"
