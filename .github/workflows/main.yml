@@ -9,62 +9,44 @@ on:
 
 env:
   CONFIG_NAME: "andreym"
+  ONEC_PLATFORM: ${{ secrets.ONEC_PLATFORM }}
+  STORAGE: ${{ secrets.STORAGE }}
+  STORAGE_USER: ${{ secrets.STORAGE_USER }}
+  STORAGE_PWD: ${{ secrets.STORAGE_PWD }}
+  TEST_IB_CONN: ${{ secrets.TEST_IB_CONN }}
+  TEST_IB_USER: ${{ secrets.TEST_IB_USER }}
+  TEST_IB_PWD: ${{ secrets.TEST_IB_PWD }}
+  PUBLISH_URL: ${{ secrets.PUBLISH_URL }}
 
 jobs:
   build:
     name: 🔨 Сборка конфигурации
     runs-on: windows-latest
-    
     steps:
-      - name: Checkout кода
-        uses: actions/checkout@v4
-        
-      - name: Подготовка окружения
+      - uses: actions/checkout@v4
+
+      - name: Подготовка каталогов
         shell: pwsh
         run: |
-          Write-Host "Создание структуры каталогов..."
-          New-Item -ItemType Directory -Path "artifacts" -Force
-          New-Item -ItemType Directory -Path "artifacts/build" -Force
-          New-Item -ItemType Directory -Path "artifacts/backups" -Force
-          New-Item -ItemType Directory -Path "artifacts/logs" -Force
-          Write-Host "✅ Структура создана"
-          
-      - name: Создать CF файл конфигурации
-        shell: pwsh
-        env:
-          GITHUB_RUN_NUMBER: ${{ github.run_number }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
-          GITHUB_REF_NAME: ${{ github.ref_name }}
-          GITHUB_ACTOR: ${{ github.actor }}
-        run: |
-          $cfPath = "artifacts/build/andreym.cf"
-          $version = "$(Get-Date -Format 'yyyy.MM.dd').$env:GITHUB_RUN_NUMBER"
-          
-          Write-Host "Создание CF файла: $cfPath"
-          
-          $lines = @(
-            "# Конфигурация 1C",
-            "Название: andreym",
-            "Версия: $version",
-            "Дата сборки: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
-            "Сборка: $env:GITHUB_RUN_ID",
-            "Ветка: $env:GITHUB_REF_NAME",
-            "Автор: $env:GITHUB_ACTOR"
-          )
-          
-          $lines | Out-File -FilePath $cfPath -Encoding UTF8
-          Write-Host "✅ CF файл создан: $cfPath"
-          Write-Host "📏 Размер: $((Get-Item $cfPath).Length) байт"
-          
-      - name: Создать резервную копию
+          New-Item -ItemType Directory -Path "artifacts/build" -Force | Out-Null
+          New-Item -ItemType Directory -Path "artifacts/backups" -Force | Out-Null
+          New-Item -ItemType Directory -Path "artifacts/logs" -Force | Out-Null
+
+      - name: Сборка из хранилища → CF
         shell: pwsh
         run: |
-          $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-          $source = "artifacts/build/andreym.cf"
-          $backup = "artifacts/backups/andreym-$timestamp.cf"
-          Copy-Item -Path $source -Destination $backup
-          Write-Host "✅ Резервная копия: $backup"
-          
+          pwsh -File scripts/build-1c.ps1 `
+            -Platform "$env:ONEC_PLATFORM" `
+            -Storage "$env:STORAGE" `
+            -StorageUser "$env:STORAGE_USER" `
+            -StoragePwd "$env:STORAGE_PWD" `
+            -OutCf "artifacts/build/${{ env.CONFIG_NAME }}.cf"
+
+      - name: Резервная копия CF
+        shell: pwsh
+        run: |
+          pwsh -File scripts/simple-build.ps1 -Source "artifacts/build/${{ env.CONFIG_NAME }}.cf" -BackupDir "artifacts/backups"
+
       - name: Загрузить артефакты
         uses: actions/upload-artifact@v4
         with:
@@ -72,97 +54,56 @@ jobs:
           path: artifacts/
           retention-days: 30
 
-  deploy:
-    name: 🚀 Деплой
+  test_deploy:
+    name: 🧪 Тест + Деплой
     runs-on: windows-latest
     needs: build
     if: github.ref == 'refs/heads/main'
-    
     steps:
-      - name: Checkout кода
-        uses: actions/checkout@v4
-        
-      - name: Загрузить артефакты
+      - uses: actions/checkout@v4
+
+      - name: Скачать артефакты
         uses: actions/download-artifact@v4
         with:
           name: 1c-configuration-${{ github.run_id }}
-          path: artifacts  # ✅ Загружаем в artifacts/ - теперь структура правильная
+          path: artifacts
           merge-multiple: false
-          
-      - name: Создать папку для логов (если не существует)
+
+      - name: Проверка CF
         shell: pwsh
         run: |
-          if (!(Test-Path "artifacts/logs")) {
-            New-Item -ItemType Directory -Path "artifacts/logs" -Force
-            Write-Host "✅ Папка logs создана"
-          }
-          
-      - name: Проверить конфигурацию
+          if (-not (Test-Path "artifacts/build/${{ env.CONFIG_NAME }}.cf")) { Write-Error "CF not found"; exit 1 }
+          Get-ChildItem -Recurse artifacts | Format-Table FullName
+
+      - name: Обновление ИБ (деплой)
         shell: pwsh
         run: |
-          Write-Host "🔍 Проверка собранной конфигурации..."
-          Write-Host "Текущая директория: $(Get-Location)"
-          Write-Host "Содержимое artifacts:"
-          Get-ChildItem -Path "artifacts" -Recurse -ErrorAction SilentlyContinue | Format-Table FullName
-          
-          $cfFile = "artifacts/build/andreym.cf"  # ✅ Путь правильный
-          if (Test-Path $cfFile) {
-            Write-Host "✅ CF файл найден"
-            Write-Host "--- Содержимое ---"
-            Get-Content $cfFile
-            Write-Host "-----------------"
-          } else {
-            Write-Host "❌ CF файл не найден"
-            Write-Host "Поиск всех .cf файлов:"
-            Get-ChildItem -Path "." -Recurse -Filter "*.cf" -ErrorAction SilentlyContinue
-            exit 1
-          }
-          
-      - name: Деплой на тестовый сервер (заглушка)
+          pwsh -File scripts/deploy-1c.ps1 `
+            -Platform "$env:ONEC_PLATFORM" `
+            -Infobase "$env:TEST_IB_CONN" `
+            -IBUser "$env:TEST_IB_USER" `
+            -IBPwd "$env:TEST_IB_PWD" `
+            -Cf "artifacts/build/${{ env.CONFIG_NAME }}.cf"
+
+      - name: Smoke-тест ИБ
         shell: pwsh
         run: |
-          Write-Host "🚀 Имитация деплоя на сервер 1C..."
-          Write-Host "📄 Используется файл: artifacts/build/andreym.cf"
-          Write-Host "✅ Деплой выполнен успешно (тестовый режим)"
-          
-      - name: Создать лог выполнения
-        shell: pwsh
+          pwsh -File scripts/tests/smoke.ps1 `
+            -Platform "$env:ONEC_PLATFORM" `
+            -Infobase "$env:TEST_IB_CONN" `
+            -IBUser "$env:TEST_IB_USER" `
+            -IBPwd "$env:TEST_IB_PWD"
+
+      - name: Логи деплоя
         if: always()
-        env:
-          GITHUB_RUN_ID: ${{ github.run_id }}
-          GITHUB_REF_NAME: ${{ github.ref_name }}
-          CONFIG_NAME: ${{ env.CONFIG_NAME }}
+        shell: pwsh
         run: |
-          Write-Host "📝 Создание лога выполнения..."
-          
-          if ($LASTEXITCODE -eq 0) {
-            $status = "УСПЕХ"
-          } else {
-            $status = "ОШИБКА"
-          }
-          
-          $logDir = "artifacts/logs"
-          if (!(Test-Path $logDir)) {
-            New-Item -ItemType Directory -Path $logDir -Force
-          }
-          
-          $logFile = "$logDir/deploy-$env:GITHUB_RUN_ID.log"
-          $logContent = @(
-            "1C CI/CD Лог выполнения",
-            "=======================",
-            "Запуск: $env:GITHUB_RUN_ID",
-            "Ветка: $env:GITHUB_REF_NAME",
-            "Статус: $status",
-            "Время: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
-            "Конфигурация: $env:CONFIG_NAME"
-          )
-          
-          $logContent | Out-File -FilePath $logFile -Encoding UTF8
-          Write-Host "✅ Лог сохранен: $logFile"
-          Write-Host "Содержимое лога:"
-          Get-Content $logFile
-          
-      - name: Загрузить лог как артефакт
+          $status = if ($LASTEXITCODE -eq 0) { "SUCCESS" } else { "FAIL" }
+          $log = "artifacts/logs/deploy-$($env:GITHUB_RUN_ID).log"
+          "Status: $status`nTime: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" | Out-File $log -Encoding UTF8
+          Get-Content $log
+
+      - name: Артефакт логов
         if: always()
         uses: actions/upload-artifact@v4
         with:

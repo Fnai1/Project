@@ -1,19 +1,18 @@
 ﻿param(
   [Parameter(Mandatory)] [string]$Platform,
   [Parameter(Mandatory)] [string]$Infobase,
-  [Parameter(Mandatory)] [string]$BackupCf,
   [string]$IBUser,
   [string]$IBPwd
 )
 
-$designer = Join-Path $Platform '1cv8.exe'
+$thin = Join-Path $Platform '1cv8.exe'
 $auth = @()
 if ($IBUser) { $auth += "/N`"$IBUser`"" }
 if ($IBPwd)  { $auth += "/P`"$IBPwd`"" }
 
-& $designer DESIGNER $Infobase '/DisableStartupMessages' $auth "/LoadCfg`"$BackupCf`"" '/UpdateDBCfg -force'
+& $thin ENTERPRISE $Infobase '/DisableStartupMessages' $auth '/ExecuteMode' '/Command "MESSAGE Done"'
 if ($LASTEXITCODE -ne 0) {
-  Write-Error "Rollback failed"
+  Write-Error "Smoke failed"
   exit 1
 }
-Write-Host "Rollback OK"
+Write-Host "Smoke OK"
