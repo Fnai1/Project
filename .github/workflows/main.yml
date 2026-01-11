@@ -1,4 +1,4 @@
-﻿name: 1C CI/CD Pipeline
+name: 1C CI/CD Pipeline
 
 on:
   push:
@@ -6,9 +6,15 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      config_name:
+        description: 'Имя конфигурации (CF-файла)'
+        required: false
+        default: 'config'
+        type: string
 
 env:
-  CONFIG_NAME: "andreym"
+  CONFIG_NAME: ${{ github.event.inputs.config_name || 'config' }}
   ONEC_PLATFORM: ${{ secrets.ONEC_PLATFORM }}
   STORAGE: ${{ secrets.STORAGE }}
   STORAGE_USER: ${{ secrets.STORAGE_USER }}
@@ -31,6 +37,7 @@ jobs:
           New-Item -ItemType Directory -Path "artifacts/build" -Force | Out-Null
           New-Item -ItemType Directory -Path "artifacts/backups" -Force | Out-Null
           New-Item -ItemType Directory -Path "artifacts/logs" -Force | Out-Null
+          Write-Host "Используется имя конфигурации: $env:CONFIG_NAME"
 
       - name: Сборка из хранилища → CF
         shell: pwsh
@@ -45,7 +52,10 @@ jobs:
       - name: Резервная копия CF
         shell: pwsh
         run: |
-          pwsh -File scripts/simple-build.ps1 -Source "artifacts/build/${{ env.CONFIG_NAME }}.cf" -BackupDir "artifacts/backups"
+          pwsh -File scripts/simple-build.ps1 `
+            -Source "artifacts/build/${{ env.CONFIG_NAME }}.cf" `
+            -BackupDir "artifacts/backups" `
+            -Prefix "${{ env.CONFIG_NAME }}"
 
       - name: Загрузить артефакты
         uses: actions/upload-artifact@v4
@@ -73,6 +83,7 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Test-Path "artifacts/build/${{ env.CONFIG_NAME }}.cf")) { Write-Error "CF not found"; exit 1 }
+          Write-Host "Найден CF-файл: ${{ env.CONFIG_NAME }}.cf"
           Get-ChildItem -Recurse artifacts | Format-Table FullName
 
       - name: Обновление ИБ (деплой)
@@ -100,7 +111,18 @@ jobs:
         run: |
           $status = if ($LASTEXITCODE -eq 0) { "SUCCESS" } else { "FAIL" }
           $log = "artifacts/logs/deploy-$($env:GITHUB_RUN_ID).log"
-          "Status: $status`nTime: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" | Out-File $log -Encoding UTF8
+          @"
+          ==============================================
+          1C CI/CD Pipeline Deployment Log
+          ==============================================
+          Configuration: $env:CONFIG_NAME
+          Status: $status
+          Run ID: $env:GITHUB_RUN_ID
+          Branch: $env:GITHUB_REF_NAME
+          Commit: $env:GITHUB_SHA
+          Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+          ==============================================
+          "@ | Out-File $log -Encoding UTF8
           Get-Content $log
 
       - name: Артефакт логов
