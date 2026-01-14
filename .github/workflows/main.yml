@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Подготовка каталогов
-        shell: pwsh
+        shell: powershell
         run: |
           New-Item -ItemType Directory -Path "artifacts/build" -Force | Out-Null
           New-Item -ItemType Directory -Path "artifacts/backups" -Force | Out-Null
@@ -40,9 +40,9 @@ jobs:
           Write-Host "Используется имя конфигурации: $env:CONFIG_NAME"
 
       - name: Сборка из хранилища → CF
-        shell: pwsh
+        shell: powershell
         run: |
-          pwsh -File scripts/build-1c.ps1 `
+          & powershell -File scripts/build-1c.ps1 `
             -Platform "$env:ONEC_PLATFORM" `
             -Storage "$env:STORAGE" `
             -StorageUser "$env:STORAGE_USER" `
@@ -50,9 +50,9 @@ jobs:
             -OutCf "artifacts/build/${{ env.CONFIG_NAME }}.cf"
 
       - name: Резервная копия CF
-        shell: pwsh
+        shell: powershell
         run: |
-          pwsh -File scripts/simple-build.ps1 `
+          & powershell -File scripts/simple-build.ps1 `
             -Source "artifacts/build/${{ env.CONFIG_NAME }}.cf" `
             -BackupDir "artifacts/backups" `
             -Prefix "${{ env.CONFIG_NAME }}"
@@ -66,7 +66,7 @@ jobs:
 
   test_deploy:
     name: 🧪 Тест + Деплой
-    runs-on: windows-latest
+    runs-on: self-hosted
     needs: build
     if: github.ref == 'refs/heads/main'
     steps:
@@ -80,16 +80,16 @@ jobs:
           merge-multiple: false
 
       - name: Проверка CF
-        shell: pwsh
+        shell: powershell
         run: |
           if (-not (Test-Path "artifacts/build/${{ env.CONFIG_NAME }}.cf")) { Write-Error "CF not found"; exit 1 }
           Write-Host "Найден CF-файл: ${{ env.CONFIG_NAME }}.cf"
           Get-ChildItem -Recurse artifacts | Format-Table FullName
 
       - name: Обновление ИБ (деплой)
-        shell: pwsh
+        shell: powershell
         run: |
-          pwsh -File scripts/deploy-1c.ps1 `
+          & powershell -File scripts/deploy-1c.ps1 `
             -Platform "$env:ONEC_PLATFORM" `
             -Infobase "$env:TEST_IB_CONN" `
             -IBUser "$env:TEST_IB_USER" `
@@ -97,9 +97,9 @@ jobs:
             -Cf "artifacts/build/${{ env.CONFIG_NAME }}.cf"
 
       - name: Smoke-тест ИБ
-        shell: pwsh
+        shell: powershell
         run: |
-          pwsh -File scripts/tests/smoke.ps1 `
+          & powershell -File tests/smoke.ps1 `
             -Platform "$env:ONEC_PLATFORM" `
             -Infobase "$env:TEST_IB_CONN" `
             -IBUser "$env:TEST_IB_USER" `
@@ -107,7 +107,7 @@ jobs:
 
       - name: Логи деплоя
         if: always()
-        shell: pwsh
+        shell: powershell
         run: |
           $status = if ($LASTEXITCODE -eq 0) { "SUCCESS" } else { "FAIL" }
           $log = "artifacts/logs/deploy-$($env:GITHUB_RUN_ID).log"
