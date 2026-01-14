@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       config_name:
-        description: 'Имя конфигурации (CF-файла)'
+        description: 'Configuration name (CF file)'
         required: false
         default: 'config'
         type: string
@@ -26,20 +26,20 @@ env:
 
 jobs:
   build:
-    name: 🔨 Сборка конфигурации
+    name: Build Configuration
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 
-      - name: Подготовка каталогов
+      - name: Prepare directories
         shell: powershell
         run: |
           New-Item -ItemType Directory -Path "artifacts/build" -Force | Out-Null
           New-Item -ItemType Directory -Path "artifacts/backups" -Force | Out-Null
           New-Item -ItemType Directory -Path "artifacts/logs" -Force | Out-Null
-          Write-Host "Используется имя конфигурации: $env:CONFIG_NAME"
+          Write-Host "Config name: $env:CONFIG_NAME"
 
-      - name: Сборка из хранилища → CF
+      - name: Build from storage to CF
         shell: powershell
         run: |
           & powershell -File scripts/build-1c.ps1 `
@@ -49,7 +49,7 @@ jobs:
             -StoragePwd "$env:STORAGE_PWD" `
             -OutCf "artifacts/build/${{ env.CONFIG_NAME }}.cf"
 
-      - name: Резервная копия CF
+      - name: Create backup copy
         shell: powershell
         run: |
           & powershell -File scripts/simple-build.ps1 `
@@ -57,7 +57,7 @@ jobs:
             -BackupDir "artifacts/backups" `
             -Prefix "${{ env.CONFIG_NAME }}"
 
-      - name: Загрузить артефакты
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: 1c-configuration-${{ github.run_id }}
@@ -65,28 +65,31 @@ jobs:
           retention-days: 30
 
   test_deploy:
-    name: 🧪 Тест + Деплой
+    name: Test and Deploy
     runs-on: self-hosted
     needs: build
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Скачать артефакты
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           name: 1c-configuration-${{ github.run_id }}
           path: artifacts
           merge-multiple: false
 
-      - name: Проверка CF
+      - name: Verify CF file
         shell: powershell
         run: |
-          if (-not (Test-Path "artifacts/build/${{ env.CONFIG_NAME }}.cf")) { Write-Error "CF not found"; exit 1 }
-          Write-Host "Найден CF-файл: ${{ env.CONFIG_NAME }}.cf"
+          if (-not (Test-Path "artifacts/build/${{ env.CONFIG_NAME }}.cf")) { 
+            Write-Error "CF file not found"
+            exit 1 
+          }
+          Write-Host "CF file found: ${{ env.CONFIG_NAME }}.cf"
           Get-ChildItem -Recurse artifacts | Format-Table FullName
 
-      - name: Обновление ИБ (деплой)
+      - name: Deploy to infobase
         shell: powershell
         run: |
           & powershell -File scripts/deploy-1c.ps1 `
@@ -96,7 +99,7 @@ jobs:
             -IBPwd "$env:TEST_IB_PWD" `
             -Cf "artifacts/build/${{ env.CONFIG_NAME }}.cf"
 
-      - name: Smoke-тест ИБ
+      - name: Smoke test
         shell: powershell
         run: |
           & powershell -File tests/smoke.ps1 `
@@ -105,7 +108,7 @@ jobs:
             -IBUser "$env:TEST_IB_USER" `
             -IBPwd "$env:TEST_IB_PWD"
 
-      - name: Логи деплоя
+      - name: Generate deployment log
         if: always()
         shell: powershell
         run: |
@@ -125,7 +128,7 @@ jobs:
           "@ | Out-File $log -Encoding UTF8
           Get-Content $log
 
-      - name: Артефакт логов
+      - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
