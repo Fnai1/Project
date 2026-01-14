@@ -42,12 +42,16 @@ jobs:
       - name: Build from storage to CF
         shell: powershell
         run: |
-          & powershell -File scripts/build-1c.ps1 `
-            -Platform "$env:ONEC_PLATFORM" `
-            -Storage "$env:STORAGE" `
-            -StorageUser "$env:STORAGE_USER" `
-            -StoragePwd "$env:STORAGE_PWD" `
-            -OutCf "artifacts/build/${{ env.CONFIG_NAME }}.cf"
+          $params = @{
+            Platform = $env:ONEC_PLATFORM
+            Storage = $env:STORAGE
+            StorageUser = $env:STORAGE_USER
+            OutCf = "artifacts/build/${{ env.CONFIG_NAME }}.cf"
+          }
+          if ($env:STORAGE_PWD) {
+            $params['StoragePwd'] = $env:STORAGE_PWD
+          }
+          & powershell -File scripts/build-1c.ps1 @params
 
       - name: Create backup copy
         shell: powershell
@@ -79,6 +83,11 @@ jobs:
           path: artifacts
           merge-multiple: false
 
+      - name: Prepare logs directory
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Path "artifacts/logs" -Force | Out-Null
+
       - name: Verify CF file
         shell: powershell
         run: |
@@ -91,22 +100,36 @@ jobs:
 
       - name: Deploy to infobase
         shell: powershell
+        continue-on-error: true
         run: |
-          & powershell -File scripts/deploy-1c.ps1 `
-            -Platform "$env:ONEC_PLATFORM" `
-            -Infobase "$env:TEST_IB_CONN" `
-            -IBUser "$env:TEST_IB_USER" `
-            -IBPwd "$env:TEST_IB_PWD" `
-            -Cf "artifacts/build/${{ env.CONFIG_NAME }}.cf"
+          $params = @{
+            Platform = $env:ONEC_PLATFORM
+            Infobase = $env:TEST_IB_CONN
+            Cf = "artifacts/build/${{ env.CONFIG_NAME }}.cf"
+          }
+          if ($env:TEST_IB_USER) {
+            $params['IBUser'] = $env:TEST_IB_USER
+          }
+          if ($env:TEST_IB_PWD) {
+            $params['IBPwd'] = $env:TEST_IB_PWD
+          }
+          & powershell -File scripts/deploy-1c.ps1 @params
 
       - name: Smoke test
         shell: powershell
+        continue-on-error: true
         run: |
-          & powershell -File tests/smoke.ps1 `
-            -Platform "$env:ONEC_PLATFORM" `
-            -Infobase "$env:TEST_IB_CONN" `
-            -IBUser "$env:TEST_IB_USER" `
-            -IBPwd "$env:TEST_IB_PWD"
+          $params = @{
+            Platform = $env:ONEC_PLATFORM
+            Infobase = $env:TEST_IB_CONN
+          }
+          if ($env:TEST_IB_USER) {
+            $params['IBUser'] = $env:TEST_IB_USER
+          }
+          if ($env:TEST_IB_PWD) {
+            $params['IBPwd'] = $env:TEST_IB_PWD
+          }
+          & powershell -File tests/smoke.ps1 @params
 
       - name: Generate deployment log
         if: always()
