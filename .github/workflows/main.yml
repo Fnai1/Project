@@ -93,7 +93,7 @@ jobs:
           
           $Uri = "https://ntfy.sh/${{ env.NTFY_TOPIC }}"
           $Headers = @{
-            "Title" = "🔨 Build $STATUS_TEXT"
+            "Title" = "Build $STATUS_TEXT"
             "Priority" = $PRIORITY
             "Tags" = "$EMOJI,package"
           }
@@ -227,7 +227,7 @@ jobs:
           
           $Uri = "https://ntfy.sh/${{ env.NTFY_TOPIC }}"
           $Headers = @{
-            "Title" = "🚀 Deploy $STATUS"
+            "Title" = "Deploy $STATUS"
             "Priority" = $PRIORITY
             "Tags" = $TAGS
             "Click" = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -271,7 +271,7 @@ jobs:
 
       - name: Send summary notification
         run: |
-          MESSAGE="📊 Pipeline Summary"
+          MESSAGE="Pipeline Summary"
           MESSAGE="$MESSAGE\n\nConfiguration: ${{ env.CONFIG_NAME }}"
           MESSAGE="$MESSAGE\nBuild: ${{ needs.build.result }}"
           MESSAGE="$MESSAGE\nDeploy: ${{ needs.test_deploy.result }}"
@@ -282,7 +282,7 @@ jobs:
           MESSAGE="$MESSAGE\n\nView full report:"
           MESSAGE="$MESSAGE\nhttps://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
-          curl -H "Title: 📊 1C CI/CD - ${{ steps.status.outputs.status }}" \
+          curl -H "Title: 1C CI/CD - ${{ steps.status.outputs.status }}" \
                -H "Priority: ${{ steps.status.outputs.priority }}" \
                -H "Tags: ${{ steps.status.outputs.emoji }},chart_with_upwards_trend" \
                -H "Click: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
