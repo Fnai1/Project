@@ -41,30 +41,50 @@ if ($IBPwd) {
 }
 
 Write-Host "=========================================="
-Write-Host "Executing: $thin $($cmd[0..3] -join ' ')..."
+Write-Host "Full command:"
+Write-Host "$thin $($cmd -join ' ')"
 Write-Host "=========================================="
 
+# Ensure logs directory exists
+$logsDir = "artifacts\logs"
+if (-not (Test-Path $logsDir)) {
+  New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
+}
+
 try {
-  $output = & $thin $cmd 2>&1
-  $exitCode = $LASTEXITCODE
+  # Run with explicit output capture
+  $process = Start-Process -FilePath $thin `
+                           -ArgumentList $cmd `
+                           -Wait `
+                           -PassThru `
+                           -RedirectStandardOutput "$logsDir\smoke-stdout.log" `
+                           -RedirectStandardError "$logsDir\smoke-stderr.log" `
+                           -NoNewWindow `
+                           -ErrorAction Stop
   
-  # Handle case where exit code is null/empty
-  if ($null -eq $exitCode -or $exitCode -eq "") {
-    Write-Host "Exit code: (empty - process may not have started)"
-    Write-Host "Output: $output"
-    Write-Host "=========================================="
-    Write-Error "Smoke test FAILED - 1C process did not return exit code"
-    Write-Host "=========================================="
-    exit 1
-  }
+  $exitCode = $process.ExitCode
   
-  if ($output) {
-    Write-Host "Output: $output"
-  }
   Write-Host "Exit code: $exitCode"
   
+  # Show stdout
+  if (Test-Path "$logsDir\smoke-stdout.log") {
+    $stdout = Get-Content "$logsDir\smoke-stdout.log" -Raw
+    if ($stdout) {
+      Write-Host "STDOUT:"
+      Write-Host $stdout
+    }
+  }
+  
+  # Show stderr
+  if (Test-Path "$logsDir\smoke-stderr.log") {
+    $stderr = Get-Content "$logsDir\smoke-stderr.log" -Raw
+    if ($stderr) {
+      Write-Host "STDERR:"
+      Write-Host $stderr
+    }
+  }
+  
   # Exit code 0 means success
-  # Exit code 1 with OneDrive path might be a permissions issue
   if ($exitCode -eq 0) {
     Write-Host "=========================================="
     Write-Host "Smoke test PASSED"
@@ -79,6 +99,7 @@ try {
     Write-Host "  - OneDrive sync conflict"
     Write-Host "  - Insufficient permissions"
     Write-Host "  - Corrupted database"
+    Write-Host "  - Previous deployment failed"
     Write-Host "=========================================="
     exit 1
   }
@@ -86,6 +107,7 @@ try {
 catch {
   Write-Host "=========================================="
   Write-Error "Smoke test FAILED - Exception: $($_.Exception.Message)"
+  Write-Host "Full error: $($_ | Format-List -Force | Out-String)"
   Write-Host "=========================================="
   exit 1
 }
