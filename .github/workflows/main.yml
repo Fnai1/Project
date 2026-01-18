@@ -23,6 +23,7 @@ env:
   TEST_IB_USER: ${{ secrets.TEST_IB_USER }}
   TEST_IB_PWD: ${{ secrets.TEST_IB_PWD }}
   PUBLISH_URL: ${{ secrets.PUBLISH_URL }}
+  NTFY_TOPIC: fnai1-cicd-notifications
 
 jobs:
   build:
@@ -68,6 +69,28 @@ jobs:
           path: artifacts/
           retention-days: 30
 
+      - name: Notify build status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            EMOJI="white_check_mark"
+            STATUS="SUCCESS"
+            PRIORITY="default"
+          else
+            EMOJI="x"
+            STATUS="FAILED"
+            PRIORITY="urgent"
+          fi
+          
+          curl -H "Title: 🔨 Build $STATUS" \
+               -H "Priority: $PRIORITY" \
+               -H "Tags: $EMOJI,package" \
+               -d "Configuration: ${{ env.CONFIG_NAME }}
+Branch: ${{ github.ref_name }}
+Commit: ${{ github.sha }}
+Author: ${{ github.actor }}" \
+               ntfy.sh/${{ env.NTFY_TOPIC }}
+
   test_deploy:
     name: Test and Deploy
     runs-on: self-hosted
@@ -99,6 +122,7 @@ jobs:
           Get-ChildItem -Recurse artifacts | Format-Table FullName
 
       - name: Deploy to infobase
+        id: deploy_step
         shell: powershell
         continue-on-error: true
         run: |
@@ -116,6 +140,7 @@ jobs:
           & powershell -File scripts/deploy-1c.ps1 @params
 
       - name: Smoke test
+        id: test_step
         shell: powershell
         continue-on-error: true
         run: |
@@ -135,21 +160,64 @@ jobs:
         if: always()
         shell: powershell
         run: |
-          $status = if ($LASTEXITCODE -eq 0) { "SUCCESS" } else { "FAIL" }
+          $deployStatus = "${{ steps.deploy_step.outcome }}"
+          $testStatus = "${{ steps.test_step.outcome }}"
+          $overallStatus = if ($deployStatus -eq 'success' -and $testStatus -eq 'success') { "SUCCESS" } else { "FAILED" }
+          
           $log = "artifacts/logs/deploy-$($env:GITHUB_RUN_ID).log"
           @"
           ==============================================
           1C CI/CD Pipeline Deployment Log
           ==============================================
           Configuration: $env:CONFIG_NAME
-          Status: $status
+          Overall Status: $overallStatus
+          Deploy Status: $deployStatus
+          Test Status: $testStatus
           Run ID: $env:GITHUB_RUN_ID
           Branch: $env:GITHUB_REF_NAME
           Commit: $env:GITHUB_SHA
+          Actor: $env:GITHUB_ACTOR
           Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
           ==============================================
           "@ | Out-File $log -Encoding UTF8
           Get-Content $log
+
+      - name: Notify deploy status
+        if: always()
+        run: |
+          DEPLOY_STATUS="${{ steps.deploy_step.outcome }}"
+          TEST_STATUS="${{ steps.test_step.outcome }}"
+          
+          if [ "$DEPLOY_STATUS" == "success" ] && [ "$TEST_STATUS" == "success" ]; then
+            EMOJI="white_check_mark"
+            STATUS="SUCCESS"
+            PRIORITY="default"
+            TAGS="white_check_mark,rocket"
+          elif [ "$DEPLOY_STATUS" == "failure" ] || [ "$TEST_STATUS" == "failure" ]; then
+            EMOJI="x"
+            STATUS="FAILED"
+            PRIORITY="urgent"
+            TAGS="x,warning"
+          else
+            EMOJI="warning"
+            STATUS="PARTIAL"
+            PRIORITY="high"
+            TAGS="warning,wrench"
+          fi
+          
+          MESSAGE="Configuration: ${{ env.CONFIG_NAME }}"
+          MESSAGE="$MESSAGE\nDeploy: $DEPLOY_STATUS"
+          MESSAGE="$MESSAGE\nTests: $TEST_STATUS"
+          MESSAGE="$MESSAGE\nBranch: ${{ github.ref_name }}"
+          MESSAGE="$MESSAGE\nAuthor: ${{ github.actor }}"
+          MESSAGE="$MESSAGE\n\nView: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          curl -H "Title: 🚀 Deploy $STATUS" \
+               -H "Priority: $PRIORITY" \
+               -H "Tags: $TAGS" \
+               -H "Click: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+               -d "$MESSAGE" \
+               ntfy.sh/${{ env.NTFY_TOPIC }}
 
       - name: Upload logs
         if: always()
@@ -158,3 +226,49 @@ jobs:
           name: deployment-logs-${{ github.run_id }}
           path: artifacts/logs/
           retention-days: 7
+
+  notify_summary:
+    name: Pipeline Summary
+    runs-on: ubuntu-latest
+    needs: [build, test_deploy]
+    if: always()
+    steps:
+      - name: Determine overall status
+        id: status
+        run: |
+          BUILD_STATUS="${{ needs.build.result }}"
+          DEPLOY_STATUS="${{ needs.test_deploy.result }}"
+          
+          if [ "$BUILD_STATUS" == "success" ] && [ "$DEPLOY_STATUS" == "success" ]; then
+            echo "status=SUCCESS" >> $GITHUB_OUTPUT
+            echo "emoji=tada" >> $GITHUB_OUTPUT
+            echo "priority=default" >> $GITHUB_OUTPUT
+          elif [ "$BUILD_STATUS" == "failure" ] || [ "$DEPLOY_STATUS" == "failure" ]; then
+            echo "status=FAILED" >> $GITHUB_OUTPUT
+            echo "emoji=x" >> $GITHUB_OUTPUT
+            echo "priority=urgent" >> $GITHUB_OUTPUT
+          else
+            echo "status=PARTIAL" >> $GITHUB_OUTPUT
+            echo "emoji=warning" >> $GITHUB_OUTPUT
+            echo "priority=high" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send summary notification
+        run: |
+          MESSAGE="📊 Pipeline Summary"
+          MESSAGE="$MESSAGE\n\nConfiguration: ${{ env.CONFIG_NAME }}"
+          MESSAGE="$MESSAGE\nBuild: ${{ needs.build.result }}"
+          MESSAGE="$MESSAGE\nDeploy: ${{ needs.test_deploy.result }}"
+          MESSAGE="$MESSAGE\n\nOverall: ${{ steps.status.outputs.status }}"
+          MESSAGE="$MESSAGE\nBranch: ${{ github.ref_name }}"
+          MESSAGE="$MESSAGE\nCommit: ${{ github.sha }}"
+          MESSAGE="$MESSAGE\nAuthor: ${{ github.actor }}"
+          MESSAGE="$MESSAGE\n\nView full report:"
+          MESSAGE="$MESSAGE\nhttps://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          curl -H "Title: 📊 1C CI/CD - ${{ steps.status.outputs.status }}" \
+               -H "Priority: ${{ steps.status.outputs.priority }}" \
+               -H "Tags: ${{ steps.status.outputs.emoji }},chart_with_upwards_trend" \
+               -H "Click: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+               -d "$MESSAGE" \
+               ntfy.sh/${{ env.NTFY_TOPIC }}
