@@ -130,42 +130,6 @@ jobs:
           Write-Host "CF file found: ${{ env.CONFIG_NAME }}.cf"
           Get-ChildItem -Recurse artifacts | Format-Table FullName
 
-      - name: Ensure test infobase exists
-        shell: powershell
-        run: |
-          if ($env:TEST_IB_CONN -match '^/F(.+)$') {
-            $dbPath = $matches[1]
-            Write-Host "Checking infobase path: $dbPath"
-            
-            if (-not (Test-Path $dbPath)) {
-              Write-Host "Creating infobase directory: $dbPath"
-              New-Item -ItemType Directory -Path $dbPath -Force | Out-Null
-            }
-            
-            $mainFile = Join-Path $dbPath "1Cv8.1CD"
-            if (-not (Test-Path $mainFile)) {
-              Write-Host "Infobase does not exist, creating new one..."
-              
-              $designer = Join-Path $env:ONEC_PLATFORM 'bin\1cv8.exe'
-              $cmd = @(
-                'CREATEINFOBASE',
-                $env:TEST_IB_CONN
-              )
-              
-              Write-Host "Executing: $designer $($cmd -join ' ')"
-              & $designer $cmd
-              
-              if ($LASTEXITCODE -eq 0) {
-                Write-Host "Infobase created successfully"
-              } else {
-                Write-Error "Failed to create infobase (exit code: $LASTEXITCODE)"
-                exit 1
-              }
-            } else {
-              Write-Host "Infobase already exists: $mainFile"
-            }
-          }
-
       - name: Deploy to infobase
         id: deploy_step
         shell: powershell
