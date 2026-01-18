@@ -197,13 +197,14 @@ jobs:
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
-          server_port: 587
+          server_port: 465
           secure: true
+          connection_url: smtps://smtp.gmail.com:465
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
           subject: "${{ steps.status.outputs.emoji }} 1C CI/CD Pipeline - ${{ steps.status.outputs.status }}"
           to: andreymatanin@gmail.com
-          from: 1C CI/CD Pipeline <noreply@github.com>
+          from: 1C CI/CD Pipeline <${{ secrets.MAIL_USERNAME }}>
           html_body: |
             <!DOCTYPE html>
             <html>
