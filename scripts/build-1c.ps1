@@ -28,33 +28,56 @@ if ($LASTEXITCODE -ne 0) {
   exit 1
 }
 
-# Update from repository and dump configuration
 Write-Host "Connecting to configuration repository: $Storage"
 Write-Host "User: $StorageUser"
 
-$cmd = @(
-  'DESIGNER',
-  "/F`"$tempIB`"",
-  '/DisableStartupMessages',
-  "/ConfigurationRepositoryF`"$Storage`"",
-  "/ConfigurationRepositoryN`"$StorageUser`""
+# Build common repo args
+$repoArgs = @(
+  "`/ConfigurationRepositoryF`"$Storage`"",
+  "`/ConfigurationRepositoryN`"$StorageUser`""
 )
 
 if ($StoragePwd) {
-  $cmd += "/ConfigurationRepositoryP`"$StoragePwd`""
+  $repoArgs += "`/ConfigurationRepositoryP`"$StoragePwd`""
   Write-Host "Using password: ***"
 } else {
-  $cmd += '/ConfigurationRepositoryP""'
+  $repoArgs += '/ConfigurationRepositoryP""'
   Write-Host "Using empty password"
 }
 
-$cmd += '/ConfigurationRepositoryUpdateCfg',
-        '-force',
-        "/DumpCfg`"$OutCf`""
+# 1) Bind tmp infobase to repository (important for UpdateCfg)
+$bindCmd = @(
+  'DESIGNER',
+  "`/F`"$tempIB`"",
+  '/DisableStartupMessages'
+) + $repoArgs + @(
+  '/ConfigurationRepositoryBindCfg'
+)
 
-Write-Host "Executing: $designer $($cmd -join ' ')"
+Write-Host "Binding infobase to configuration repository..."
+Write-Host "Executing: $designer $($bindCmd -join ' ')"
+& $designer $bindCmd 2>&1 | Tee-Object -FilePath "$workDir\bind.log"
 
-& $designer $cmd 2>&1 | Tee-Object -FilePath "$workDir\build.log"
+if ($LASTEXITCODE -ne 0) {
+  Write-Error "Bind failed. See $workDir\bind.log"
+  Get-Content "$workDir\bind.log" | Select-Object -Last 50
+  exit 1
+}
+
+# 2) Update from repository and dump configuration
+$buildCmd = @(
+  'DESIGNER',
+  "`/F`"$tempIB`"",
+  '/DisableStartupMessages'
+) + $repoArgs + @(
+  '/ConfigurationRepositoryUpdateCfg',
+  '-force',
+  "`/DumpCfg`"$OutCf`""
+)
+
+Write-Host "Updating configuration from repository and dumping CF..."
+Write-Host "Executing: $designer $($buildCmd -join ' ')"
+& $designer $buildCmd 2>&1 | Tee-Object -FilePath "$workDir\build.log"
 
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $OutCf)) {
   Write-Error "Build failed. See $workDir\build.log"
