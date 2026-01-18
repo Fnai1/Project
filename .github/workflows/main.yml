@@ -73,9 +73,6 @@ jobs:
     runs-on: self-hosted
     needs: build
     if: github.ref == 'refs/heads/main'
-    outputs:
-      deploy_status: ${{ steps.deploy_step.outcome }}
-      test_status: ${{ steps.test_step.outcome }}
     steps:
       - uses: actions/checkout@v4
 
@@ -102,7 +99,6 @@ jobs:
           Get-ChildItem -Recurse artifacts | Format-Table FullName
 
       - name: Deploy to infobase
-        id: deploy_step
         shell: powershell
         continue-on-error: true
         run: |
@@ -120,7 +116,6 @@ jobs:
           & powershell -File scripts/deploy-1c.ps1 @params
 
       - name: Smoke test
-        id: test_step
         shell: powershell
         continue-on-error: true
         run: |
@@ -140,23 +135,17 @@ jobs:
         if: always()
         shell: powershell
         run: |
-          $deployStatus = "${{ steps.deploy_step.outcome }}"
-          $testStatus = "${{ steps.test_step.outcome }}"
-          $overallStatus = if ($deployStatus -eq 'success' -and $testStatus -eq 'success') { "SUCCESS" } else { "FAILED" }
-          
+          $status = if ($LASTEXITCODE -eq 0) { "SUCCESS" } else { "FAIL" }
           $log = "artifacts/logs/deploy-$($env:GITHUB_RUN_ID).log"
           @"
           ==============================================
           1C CI/CD Pipeline Deployment Log
           ==============================================
           Configuration: $env:CONFIG_NAME
-          Overall Status: $overallStatus
-          Deploy Status: $deployStatus
-          Test Status: $testStatus
+          Status: $status
           Run ID: $env:GITHUB_RUN_ID
           Branch: $env:GITHUB_REF_NAME
           Commit: $env:GITHUB_SHA
-          Actor: $env:GITHUB_ACTOR
           Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
           ==============================================
           "@ | Out-File $log -Encoding UTF8
@@ -169,131 +158,3 @@ jobs:
           name: deployment-logs-${{ github.run_id }}
           path: artifacts/logs/
           retention-days: 7
-
-  notify:
-    name: Send Notifications
-    runs-on: ubuntu-latest
-    needs: [build, test_deploy]
-    if: always()
-    steps:
-      - name: Determine overall status
-        id: status
-        run: |
-          if [[ "${{ needs.build.result }}" == "success" && "${{ needs.test_deploy.result }}" == "success" ]]; then
-            echo "status=✅ SUCCESS" >> $GITHUB_OUTPUT
-            echo "emoji=✅" >> $GITHUB_OUTPUT
-            echo "color=#28a745" >> $GITHUB_OUTPUT
-          elif [[ "${{ needs.build.result }}" == "failure" || "${{ needs.test_deploy.result }}" == "failure" ]]; then
-            echo "status=❌ FAILED" >> $GITHUB_OUTPUT
-            echo "emoji=❌" >> $GITHUB_OUTPUT
-            echo "color=#dc3545" >> $GITHUB_OUTPUT
-          else
-            echo "status=⚠️ PARTIAL" >> $GITHUB_OUTPUT
-            echo "emoji=⚠️" >> $GITHUB_OUTPUT
-            echo "color=#ffc107" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Send email notification
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          secure: true
-          connection_url: smtps://smtp.gmail.com:465
-          username: ${{ secrets.MAIL_USERNAME }}
-          password: ${{ secrets.MAIL_PASSWORD }}
-          subject: "${{ steps.status.outputs.emoji }} 1C CI/CD Pipeline - ${{ steps.status.outputs.status }}"
-          to: andreymatanin@gmail.com
-          from: 1C CI/CD Pipeline <${{ secrets.MAIL_USERNAME }}>
-          html_body: |
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background: ${{ steps.status.outputs.color }}; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
-                .content { background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-top: none; }
-                .info-block { background: white; padding: 15px; margin: 10px 0; border-left: 4px solid ${{ steps.status.outputs.color }}; }
-                .info-row { margin: 8px 0; }
-                .label { font-weight: bold; color: #555; }
-                .value { color: #333; }
-                .footer { text-align: center; padding: 15px; color: #777; font-size: 12px; }
-                .button { display: inline-block; padding: 10px 20px; background: ${{ steps.status.outputs.color }}; color: white; text-decoration: none; border-radius: 5px; margin: 10px 5px; }
-                .status-badge { font-size: 24px; font-weight: bold; }
-              </style>
-            </head>
-            <body>
-              <div class="container">
-                <div class="header">
-                  <h1>${{ steps.status.outputs.emoji }} 1C CI/CD Pipeline</h1>
-                  <p class="status-badge">${{ steps.status.outputs.status }}</p>
-                </div>
-                
-                <div class="content">
-                  <div class="info-block">
-                    <h3>📦 Configuration Details</h3>
-                    <div class="info-row">
-                      <span class="label">Configuration:</span>
-                      <span class="value">${{ env.CONFIG_NAME }}</span>
-                    </div>
-                    <div class="info-row">
-                      <span class="label">Repository:</span>
-                      <span class="value">${{ github.repository }}</span>
-                    </div>
-                    <div class="info-row">
-                      <span class="label">Branch:</span>
-                      <span class="value">${{ github.ref_name }}</span>
-                    </div>
-                  </div>
-
-                  <div class="info-block">
-                    <h3>🔧 Build Information</h3>
-                    <div class="info-row">
-                      <span class="label">Build Status:</span>
-                      <span class="value">${{ needs.build.result == 'success' && '✅ Success' || '❌ Failed' }}</span>
-                    </div>
-                    <div class="info-row">
-                      <span class="label">Deploy Status:</span>
-                      <span class="value">${{ needs.test_deploy.result == 'success' && '✅ Success' || needs.test_deploy.result == 'failure' && '❌ Failed' || '⚠️ Skipped' }}</span>
-                    </div>
-                    <div class="info-row">
-                      <span class="label">Run ID:</span>
-                      <span class="value">#${{ github.run_id }}</span>
-                    </div>
-                  </div>
-
-                  <div class="info-block">
-                    <h3>👤 Commit Information</h3>
-                    <div class="info-row">
-                      <span class="label">Author:</span>
-                      <span class="value">${{ github.actor }}</span>
-                    </div>
-                    <div class="info-row">
-                      <span class="label">Commit:</span>
-                      <span class="value">${{ github.sha }}</span>
-                    </div>
-                    <div class="info-row">
-                      <span class="label">Message:</span>
-                      <span class="value">${{ github.event.head_commit.message }}</span>
-                    </div>
-                  </div>
-
-                  <div style="text-align: center; margin-top: 20px;">
-                    <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" class="button">
-                      📊 View Workflow Run
-                    </a>
-                    <a href="${{ github.server_url }}/${{ github.repository }}" class="button">
-                      📂 View Repository
-                    </a>
-                  </div>
-                </div>
-
-                <div class="footer">
-                  <p>This is an automated message from GitHub Actions</p>
-                  <p>Fnai1/Project CI/CD Pipeline</p>
-                </div>
-              </div>
-            </body>
-            </html>
-          priority: high
