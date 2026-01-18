@@ -48,13 +48,24 @@ try {
   $output = & $thin $cmd 2>&1
   $exitCode = $LASTEXITCODE
   
+  # Handle case where exit code is null/empty
+  if ($null -eq $exitCode -or $exitCode -eq "") {
+    Write-Host "Exit code: (empty - process may not have started)"
+    Write-Host "Output: $output"
+    Write-Host "=========================================="
+    Write-Error "Smoke test FAILED - 1C process did not return exit code"
+    Write-Host "=========================================="
+    exit 1
+  }
+  
   if ($output) {
     Write-Host "Output: $output"
   }
   Write-Host "Exit code: $exitCode"
   
-  # Exit codes 0-1 are usually OK for quick startup/shutdown
-  if ($exitCode -eq 0 -or $exitCode -eq 1) {
+  # Exit code 0 means success
+  # Exit code 1 with OneDrive path might be a permissions issue
+  if ($exitCode -eq 0) {
     Write-Host "=========================================="
     Write-Host "Smoke test PASSED"
     Write-Host "=========================================="
@@ -62,6 +73,12 @@ try {
   } else {
     Write-Host "=========================================="
     Write-Error "Smoke test FAILED - 1C returned exit code: $exitCode"
+    Write-Host "=========================================="
+    Write-Host "Possible causes:"
+    Write-Host "  - Database locked by another process"
+    Write-Host "  - OneDrive sync conflict"
+    Write-Host "  - Insufficient permissions"
+    Write-Host "  - Corrupted database"
     Write-Host "=========================================="
     exit 1
   }
