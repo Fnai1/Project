@@ -47,7 +47,7 @@ if ($IBPwd) {
   Write-Host "Password: (none)"
 }
 
-$cmd += "/LoadCfg`"$Cf`"",
+$cmd += "/LoadCfg `"$Cf`"",
         '/UpdateDBCfg',
         '-force'
 
