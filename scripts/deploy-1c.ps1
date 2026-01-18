@@ -21,6 +21,30 @@ if (-not (Test-Path $Cf)) {
 # Resolve to absolute path
 $CfAbsolute = (Resolve-Path $Cf).Path
 
+# Parse infobase path
+if ($Infobase -match '^/F(.+)$') {
+  $dbPath = $matches[1]
+  Write-Host "Parsed DB path: $dbPath"
+  
+  # Check if database exists
+  if (-not (Test-Path $dbPath)) {
+    Write-Error "Database path does not exist: $dbPath"
+    Write-Host "Please create the infobase first or check the path"
+    exit 1
+  }
+  
+  # Check for 1Cv8.1CD file
+  $mainFile = Join-Path $dbPath "1Cv8.1CD"
+  if (-not (Test-Path $mainFile)) {
+    Write-Warning "Main database file not found: $mainFile"
+    Write-Host "This might be a new/empty infobase"
+  } else {
+    Write-Host "Database file found: $mainFile"
+    $dbSize = (Get-Item $mainFile).Length / 1MB
+    Write-Host "Database size: $([math]::Round($dbSize, 2)) MB"
+  }
+}
+
 Write-Host "=========================================="
 Write-Host "Starting deployment"
 Write-Host "=========================================="
@@ -53,8 +77,7 @@ if ($IBPwd) {
 
 # Use absolute path for LoadCfg
 $cmd += "/LoadCfg `"$CfAbsolute`"",
-        '/UpdateDBCfg',
-        '-force'
+        '/UpdateDBCfg'
 
 Write-Host "=========================================="
 Write-Host "Full command:"
@@ -70,6 +93,13 @@ if (-not (Test-Path $logsDir)) {
 $logFile = "$logsDir\deploy-apply.log"
 Write-Host "Log file: $logFile"
 Write-Host "=========================================="
+
+# Kill any hanging 1C processes first
+Get-Process -Name "1cv8" -ErrorAction SilentlyContinue | ForEach-Object {
+  Write-Warning "Killing hanging 1C process (PID: $($_.Id))"
+  Stop-Process -Id $_.Id -Force
+  Start-Sleep -Seconds 2
+}
 
 # Run with explicit output capture
 $process = Start-Process -FilePath $designer `
@@ -88,19 +118,23 @@ Write-Host "=========================================="
 
 # Show stdout
 if (Test-Path "$logsDir\deploy-stdout.log") {
-  $stdout = Get-Content "$logsDir\deploy-stdout.log" -Raw
-  if ($stdout) {
+  $stdout = Get-Content "$logsDir\deploy-stdout.log" -Raw -ErrorAction SilentlyContinue
+  if ($stdout -and $stdout.Trim()) {
     Write-Host "STDOUT:"
     Write-Host $stdout
+  } else {
+    Write-Host "STDOUT: (empty)"
   }
 }
 
-# Show stderr
+# Show stderr  
 if (Test-Path "$logsDir\deploy-stderr.log") {
-  $stderr = Get-Content "$logsDir\deploy-stderr.log" -Raw
-  if ($stderr) {
+  $stderr = Get-Content "$logsDir\deploy-stderr.log" -Raw -ErrorAction SilentlyContinue
+  if ($stderr -and $stderr.Trim()) {
     Write-Host "STDERR:"
     Write-Host $stderr
+  } else {
+    Write-Host "STDERR: (empty)"
   }
 }
 
@@ -109,11 +143,14 @@ if ($exitCode -ne 0) {
   Write-Error "Deployment FAILED with exit code: $exitCode"
   Write-Host "=========================================="
   Write-Host "Possible issues:"
-  Write-Host "  1. Database is locked (check Task Manager for 1cv8.exe)"
-  Write-Host "  2. OneDrive sync conflict"
-  Write-Host "  3. Insufficient permissions"
-  Write-Host "  4. Corrupted CF file"
-  Write-Host "  5. Wrong infobase path format"
+  Write-Host "  1. Database is locked by another process (OneDrive, antivirus)"
+  Write-Host "  2. OneDrive sync conflict - MOVE DB OUT OF ONEDRIVE"
+  Write-Host "  3. Insufficient permissions on database folder"
+  Write-Host "  4. Database is corrupted or in use"
+  Write-Host "  5. 1C platform version mismatch"
+  Write-Host ""
+  Write-Host "RECOMMENDED: Move database to C:\Databases\InfoBase10"
+  Write-Host "             Then update TEST_IB_CONN secret to /FC:\Databases\InfoBase10"
   Write-Host "=========================================="
   exit 1
 }
