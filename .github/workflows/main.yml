@@ -71,24 +71,25 @@ jobs:
 
       - name: Notify build status
         if: always()
+        shell: powershell
         run: |
-          if [ "${{ job.status }}" == "success" ]; then
-            EMOJI="white_check_mark"
-            STATUS="SUCCESS"
-            PRIORITY="default"
-          else
-            EMOJI="x"
-            STATUS="FAILED"
-            PRIORITY="urgent"
-          fi
+          $STATUS = "${{ job.status }}"
+          if ($STATUS -eq "success") {
+            $EMOJI = "white_check_mark"
+            $STATUS_TEXT = "SUCCESS"
+            $PRIORITY = "default"
+          } else {
+            $EMOJI = "x"
+            $STATUS_TEXT = "FAILED"
+            $PRIORITY = "urgent"
+          }
           
-          curl -H "Title: 🔨 Build $STATUS" \
-               -H "Priority: $PRIORITY" \
-               -H "Tags: $EMOJI,package" \
-               -d "Configuration: ${{ env.CONFIG_NAME }}
-Branch: ${{ github.ref_name }}
-Commit: ${{ github.sha }}
-Author: ${{ github.actor }}" \
+          $MESSAGE = "Configuration: ${{ env.CONFIG_NAME }}`nBranch: ${{ github.ref_name }}`nCommit: ${{ github.sha }}`nAuthor: ${{ github.actor }}"
+          
+          curl -H "Title: 🔨 Build $STATUS_TEXT" `
+               -H "Priority: $PRIORITY" `
+               -H "Tags: $EMOJI,package" `
+               -d "$MESSAGE" `
                ntfy.sh/${{ env.NTFY_TOPIC }}
 
   test_deploy:
@@ -184,39 +185,35 @@ Author: ${{ github.actor }}" \
 
       - name: Notify deploy status
         if: always()
+        shell: powershell
         run: |
-          DEPLOY_STATUS="${{ steps.deploy_step.outcome }}"
-          TEST_STATUS="${{ steps.test_step.outcome }}"
+          $DEPLOY_STATUS = "${{ steps.deploy_step.outcome }}"
+          $TEST_STATUS = "${{ steps.test_step.outcome }}"
           
-          if [ "$DEPLOY_STATUS" == "success" ] && [ "$TEST_STATUS" == "success" ]; then
-            EMOJI="white_check_mark"
-            STATUS="SUCCESS"
-            PRIORITY="default"
-            TAGS="white_check_mark,rocket"
-          elif [ "$DEPLOY_STATUS" == "failure" ] || [ "$TEST_STATUS" == "failure" ]; then
-            EMOJI="x"
-            STATUS="FAILED"
-            PRIORITY="urgent"
-            TAGS="x,warning"
-          else
-            EMOJI="warning"
-            STATUS="PARTIAL"
-            PRIORITY="high"
-            TAGS="warning,wrench"
-          fi
+          if ($DEPLOY_STATUS -eq "success" -and $TEST_STATUS -eq "success") {
+            $EMOJI = "white_check_mark"
+            $STATUS = "SUCCESS"
+            $PRIORITY = "default"
+            $TAGS = "white_check_mark,rocket"
+          } elseif ($DEPLOY_STATUS -eq "failure" -or $TEST_STATUS -eq "failure") {
+            $EMOJI = "x"
+            $STATUS = "FAILED"
+            $PRIORITY = "urgent"
+            $TAGS = "x,warning"
+          } else {
+            $EMOJI = "warning"
+            $STATUS = "PARTIAL"
+            $PRIORITY = "high"
+            $TAGS = "warning,wrench"
+          }
           
-          MESSAGE="Configuration: ${{ env.CONFIG_NAME }}"
-          MESSAGE="$MESSAGE\nDeploy: $DEPLOY_STATUS"
-          MESSAGE="$MESSAGE\nTests: $TEST_STATUS"
-          MESSAGE="$MESSAGE\nBranch: ${{ github.ref_name }}"
-          MESSAGE="$MESSAGE\nAuthor: ${{ github.actor }}"
-          MESSAGE="$MESSAGE\n\nView: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          $MESSAGE = "Configuration: ${{ env.CONFIG_NAME }}`nDeploy: $DEPLOY_STATUS`nTests: $TEST_STATUS`nBranch: ${{ github.ref_name }}`nAuthor: ${{ github.actor }}`n`nView: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
-          curl -H "Title: 🚀 Deploy $STATUS" \
-               -H "Priority: $PRIORITY" \
-               -H "Tags: $TAGS" \
-               -H "Click: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-               -d "$MESSAGE" \
+          curl -H "Title: 🚀 Deploy $STATUS" `
+               -H "Priority: $PRIORITY" `
+               -H "Tags: $TAGS" `
+               -H "Click: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" `
+               -d "$MESSAGE" `
                ntfy.sh/${{ env.NTFY_TOPIC }}
 
       - name: Upload logs
